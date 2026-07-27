@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>从零开始的城市鸟生活</title>
+    <style>
+        html, body {
+            height: 100%; /* 限制 html 和 body 的高度为父级容器的100% */
+            margin: 0;
+            padding: 0;
+        }
+        body { 
+            font-family: "微软雅黑", sans-serif; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            background-color: #2c3e50; /* 浏览器外层深色背景 */
+            overflow: hidden; /* 防止手机端出现不必要的滚动条 */
+        }
+        /* 采用 CSS Grid 实现完美的分屏与手机端重排 */
+        #game_container {
+            display: grid;
+            width: 100%;
+            max-width: 900px;
+            height: 100%;
+            max-height: 600px;
+            background-color: #f5f5f5;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border-radius: 12px;
+            overflow: hidden;
+            
+            /* 电脑端排版：左边 60% 文本，右边 40% 信息+按钮 */
+            grid-template-columns: 6fr 4fr;
+            /* 【核心修改】将上下高度比例固定为 7:3，彻底不受按钮有无的影响 */
+            grid-template-rows: 7fr 3fr;
+            grid-template-areas:
+                "log info"
+                "log action";
+        }
+        
+        #log_area { 
+            grid-area: log;
+            background-color: #fff; 
+            border-right: 2px solid #ddd; 
+            padding: 20px; 
+            overflow-y: auto; 
+            font-size: 16px; 
+            line-height: 1.6; 
+        }
+        
+        #info_box { 
+            grid-area: info;
+            background-color: #fff; 
+            padding: 20px; 
+            border-bottom: 2px solid #ddd; 
+            font-size: 16px; 
+            line-height: 1.8; 
+            display: none; /* JS会自动将其改为flex */
+            flex-direction: column; /* 电脑端文字在上，图片在下 */
+        }
+        
+        /* --- 修改：美术素材与动画样式（电脑端缩小为 144x144） --- */
+        #sprite_container {
+            flex: 1; /* 占据文字下方的所有空白区域 */
+            display: flex;
+            justify-content: center; /* 水平居中 */
+            align-items: center; /* 垂直居中 */
+        }
+
+        .bird-sprite {
+            width: 144px;
+            height: 144px;
+            background-image: url('bird_test.png'); 
+            background-size: 432px 576px; /* 原图 720x960 缩小至 60% */
+            background-position: 0px 0px; /* 取第二行 */
+            /* 采用 step-end 精确控制 4 步循环，周期 1.6 秒 */
+            animation: walk-left 1.2s step-end infinite; 
+        }
+
+        /* 完美的“左-站-右-站”来回行走动画 */
+        @keyframes walk-left {
+            0%   { background-position: 0px 0px; }       /* 帧1：左脚迈出 */
+            25%  { background-position: -144px 0px; }    /* 帧2：双脚站立 */
+            50%  { background-position: -288px 0px; }    /* 帧3：右脚迈出 */
+            75%  { background-position: -144px 0px; }    /* 帧2：收回站立 */
+            100% { background-position: 0px 0px; }       /* 无缝接回左脚 */
+        }
+        
+        #action_area { 
+            grid-area: action;
+            display: flex; 
+            flex-direction: column; 
+            justify-content: flex-end; 
+            padding: 20px; 
+            gap: 10px; 
+            background-color: #fafafa;
+        }
+
+        .action-btn { 
+            padding: 12px 20px; 
+            font-size: 16px; 
+            border: none; 
+            border-radius: 5px; 
+            background-color: #007bff; 
+            color: white; 
+            cursor: pointer; 
+            transition: background 0.2s; 
+            min-height: 48px; /* 确保手机端手指容易点击 */
+        }
+        .action-btn:hover { background-color: #0056b3; }
+        .log-line { 
+            margin-bottom: 8px; 
+            white-space: pre-wrap; /* 关键属性：强制保留代码里的连续空格和换行符 */
+        }
+        .separator { color: #888; font-weight: bold; }
+
+        /* === 手机端完美适配 === */
+        @media (max-width: 768px) {
+            #game_container {
+                max-width: 100%;
+                max-height: 100%; /* 配合 body 的 100% 使用 */
+                height: 100%;
+                border-radius: 0;
+                /* 手机端排版：上信息，中文本，下按钮 */
+                grid-template-columns: 1fr;
+                /* 【核心修改】信息栏自适应，文本框和操作区在移动端同样锁定为 7:3 的固定比例 */
+                grid-template-rows: auto 8fr 2fr;
+                grid-template-areas:
+                    "info"
+                    "log"
+                    "action";
+            }
+            #info_box {
+                padding: 10px 15px;
+                font-size: 14px;
+                line-height: 1.4;
+                display: flex;
+                flex-direction: row; /* 手机端横向排布：左文字，右素材 */
+                justify-content: space-between;
+                align-items: center;
+            }
+            
+            #info_text {
+                display: flex;
+                flex-direction: column; /* 文字靠左换行显示 */
+            }
+
+            #info_text h3 {
+                margin: 0 0 4px 0;
+            }
+            
+            /* --- 手机端美术素材等比例缩放至 40% (96x96) --- */
+            /* --- 手机端美术素材等比例缩放至 40% (96x96) --- */
+            #sprite_container {
+                flex: 0 0 auto;
+                width: 96px; 
+                height: 96px;
+                margin-left: 10px;
+            }
+
+            .bird-sprite {
+                width: 96px;
+                height: 96px;
+                background-size: 288px 384px; /* 720x960 缩小至 40% */
+                background-position: 0px -96px; 
+                animation: walk-left-mobile 1.6s step-end infinite;
+            }
+
+            @keyframes walk-left-mobile {
+                0%   { background-position: 0px -96px; }       /* 左脚 */
+                25%  { background-position: -96px -96px; }     /* 站立 */
+                50%  { background-position: -192px -96px; }    /* 右脚 */
+                75%  { background-position: -96px -96px; }     /* 站立 */
+                100% { background-position: 0px -96px; }       /* 左脚 */
+            }
+            
+            #log_area { 
+                border-right: none; 
+                padding-bottom: 30px; /* 底部 padding 增加到 30px，避免文字贴紧按钮 */
+            }
+            #action_area {
+                border-top: 2px solid #ddd;
+                padding: 15px;
+                background-color: #fff;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game_container">
+        <div id="info_box">
+            <div id="info_text">
+                <h3 id="bird_name" style="margin-top: 0;">【未知】</h3>
+                <div>年龄：<span id="stat_age">0</span></div>
+                <div>食物：<span id="stat_food">0</span></div>
+                <div>经验：<span id="stat_exp">0</span></div>
+            </div>
+            <div id="sprite_container">
+                <div class="bird-sprite"></div>
+            </div>
+        </div>
+        <div id="log_area"></div>
+        <div id="action_area"></div>
+    </div>
+
+    <script>
+        // === 游戏数据字典 (转译自原版 Python) ===
+        const birdinfo = {
+            101: { name: "夜鹭", childlim: 4, food: ["鱼","昆虫"], fight: [4, 1, 1], agelim: 5 },
+            102: { name: "树麻雀", childlim: 6, food: ["果实","谷物","昆虫"], fight: [0, 4, 2], agelim: 5 },
+            103: { name: "黑水鸡", childlim: 4, food: ["鱼","昆虫"], fight: [2, 2, 2], agelim: 5 },
+            104: { name: "小鸊鷉", childlim: 4, food: ["鱼","昆虫"], fight: [2, 2, 2], agelim: 5 },
+            105: { name: "珠颈斑鸠", childlim: 2, food: ["果实","谷物","昆虫"], fight: [2, 0, 0], agelim: 5 },
+            106: { name: "白头鹎", childlim: 5, food: ["果实","谷物","昆虫"], fight: [2, 2, 2], agelim: 5 },
+            107: { name: "乌鸫", childlim: 5, food: ["果实","昆虫"], fight: [2, 2, 4], agelim: 5 },
+            108: { name: "戴胜", childlim: 9, food: ["昆虫"], fight: [2, 2, 2], agelim: 5 },
+            109: { name: "远东山雀", childlim: 7, food: ["昆虫","小型动物"], fight: [3, 3, 3], agelim: 5 },
+            110: { name: "棕背伯劳", childlim: 6, food: ["昆虫","小型动物"], fight: [4, 2, 1], agelim: 5 },
+            111: { name: "暗绿绣眼鸟", childlim: 3, food: ["昆虫","果实"], fight: [0, 3, 2], agelim: 5 },
+            112: { name: "鹊鸲", childlim: 6, food: ["昆虫","小型动物"], fight: [2, 2, 2], agelim: 5 }
+        };
+
+        const eventData = {
+            Friend: {
+                101: {name: "黄眉柳莺", tasty: 0, gift: 1}, 102: {name: "乌灰鸫", tasty: 0, gift: 2},
+                103: {name: "游隼", tasty: 1, fight: [6, 10, 8]}, 104: {name: "黄眉鹀", tasty: 0, gift: 3},
+                105: {name: "黑枕黄鹂", tasty: 0, gift: 3}, 106: {name: "黄眉姬鹟", tasty: 0, gift: 4},
+                107: {name: "黄腰柳莺", tasty: 0, gift: 1}, 108: {name: "池鹭", tasty: 0, gift: 4},
+                109: {name: "鳞头树莺", tasty: 0, gift: 5}, 110: {name: "白腹蓝鹟", tasty: 0, gift: 6},
+                111: {name: "紫寿带", tasty: 0, gift: 6}, 112: {name: "红尾歌鸲", tasty: 0, gift: 5},
+                113: {name: "灰鹡鸰", tasty: 0, gift: 2}, 114: {name: "白眉姬鹟", tasty: 0, gift: 3},
+                115: {name: "黄鹡鸰", tasty: 0, gift: 3}, 116: {name: "黑头蜡嘴雀", tasty: 0, gift: 2},
+                117: {name: "火斑鸠", tasty: 0, gift: 2}, 118: {name: "普通夜鹰", tasty: 0, gift: 5},
+                119: {name: "白眉鹀", tasty: 0, gift: 4}, 120: {name: "红喉姬鹟", tasty: 0, gift: 5},
+                121: {name: "黄雀", tasty: 0, gift: 3}, 122: {name: "铜蓝鹟", tasty: 0, gift: 6},
+                123: {name: "苍鹰", tasty: 1, fight: [9, 8, 8]}, 124: {name: "日本松雀鹰", tasty: 1, fight: [7, 6, 7]},
+                125: {name: "小蝗莺", tasty: 0, gift: 5}, 126: {name: "燕雀", tasty: 0, gift: 5},
+                127: {name: "鹗", tasty: 0, gift: 4}, 128: {name: "领雀嘴鹎", tasty: 0, gift: 1}
+            },
+            Gift: {
+                1: {text: " 一根美丽的绿色羽毛 —— 经验+2", effect: {exp: 2}},
+                2: {text: " 一根朴素的灰色羽毛 —— 经验+1", effect: {exp: 1}},
+                3: {text: " 一根鲜艳的黄色羽毛 —— 战斗属性-敏捷+2", effect: {dex: 2}},
+                4: {text: " 一根闪亮的白色羽毛 —— 战斗属性-智慧+2", effect: {wis: 2}},
+                5: {text: " 一根柔软的棕色羽毛 —— 战斗属性-力量+2", effect: {str: 2}},
+                6: {text: " 一根鲜艳的蓝色羽毛 —— 焕发青春！年龄-1", effect: {age: -1}}
+            },
+            Food: {
+                1: {text: "找到很多美味的{food}！（食物+3）", effect: {food: 3}},
+                2: {text: "找到少量{food}。（食物+1）", effect: {food: 1}},
+                3: {text: "没找到食物。", effect: {food: 0}},
+                4: {text: "找到一些{food}，但被其他鸟抢走了。（食物-1）", effect: {food: -1}}
+            },
+            Human: {
+                1: {text: "受伤了，被人类救助"}, 2: {text: "想起自己小时候调皮跑出了巢，被好心人塞回了巢里的经历"},
+                3: {text: "被猫狗抓住，幸好主人及时管教宠物放走了我"}, 4: {text: "被盗猎者抓住，幸好警察及时放走了我"},
+                5: {text: "闯进建筑物找不到出口，被好心人扔了出去"}, 6: {text: "撞上玻璃懵逼了，被好心人保护到恢复清醒"},
+                7: {text: "我粘到了粘鼠板上，被好心人清洗干净放走"}
+            },
+            Breed: {
+                101: {text: "我不够有魅力，被异性拒绝"}, 102: {text: "我没有足够的繁殖经验"},
+                201: {text: "我的蛋被蛇捕食"}, 202: {text: "我的蛋被赤腹松鼠捕食"},
+                203: {text: "我患有天生或后天疾病"}, 204: {text: "我的巢穴被不文明的人类不断围观拍摄，我因为害怕而弃巢"},
+                301: {text: "我巢穴的遮蔽物被不文明的摄影者剪去，雏鸟被风吹雨淋而死"}, 302: {text: "我的雏鸟被猛禽捕食"},
+                303: {text: "我的雏鸟被盗猎者掏窝"}, 304: {text: "我的雏鸟被流浪猫杀死"},
+                401: {text: "我生活拮据，无法养活雏鸟"}
+            },
+            Death: {
+                101: {name: "凤头鹰", fight: [9, 8, 9]}, 102: {name: "红隼", fight: [7, 7, 7]}, 103: {name: "黄鼬", fight: [5, 6, 6]},
+                201: {name: "流浪猫", target: 4}, 202: {name: "盗猎者弹弓", target: 5}, 203: {name: "盗猎者雾网", target: 5}, 204: {name: "玻璃", target: 4},
+                301: {name: "疾病", success: "一种未知的疾病在我的族群中传播，幸好我体质不错，很快康复了。", fail: "一种未知的疾病在我的族群中传播，我倒下了。"},
+                302: {name: "衰老", success: "寒风瑟瑟，衰老带走了我的长辈，我不知道它何时会带走我...", fail: "寒风瑟瑟，我感到衰老和疲倦，我知道自己大限将至。"}
+            },
+            Fight: {
+                1: {text: "{enemy}对我摆出了捕猎姿态！", "力量": "冲上去攻击", "敏捷": "加速逃跑", "智慧": "伪装隐蔽"},
+                2: {text: "{enemy}快速向我冲来！", "力量": "正面回击", "敏捷": "闪避", "智慧": "找掩蔽物躲藏"},
+                3: {text: "{enemy}的利爪捉住了我！", "力量": "用力挣脱", "敏捷": "攻击对方要害", "智慧": "跟它讲道理"},
+                11: {win: "被我打得措手不及，落荒而逃", favoured: "被我打乱了进攻节奏", "ill-favoured": "趁机拉近了与我的距离", lose: "被我的挑衅激怒"},
+                12: {win: "被我甩得很远", favoured: "与我拉开了一段距离", "ill-favoured": "速度更胜于我", lose: "轻松追上了我"},
+                13: {win: "完全找不到我的踪迹", favoured: "被我的行动迷惑", "ill-favoured": "发现了我的踪迹", lose: "迅速看穿了我的伪装"},
+                21: {win: "被我的气势震慑", favoured: "的攻击有所迟疑", "ill-favoured": "的攻击似乎不受影响", lose: "被我的挑衅激怒"},
+                22: {win: "觉得我太灵活，不好下手", favoured: "被我的动作干扰判断", "ill-favoured": "比我更灵活", lose: "精准预判了我的路线"},
+                23: {win: "追踪我时被其他猎物吸引了注意", favoured: "花了一些时间寻找", "ill-favoured": "是躲猫猫高手", lose: "悄悄地出现在我背后"},
+                31: {win: "在打斗中消耗了过多体力", favoured: "稍稍放松了控制", "ill-favoured": "越抓越紧", lose: "在打斗中刺穿了我的喉咙"},
+                32: {win: "露出痛苦的表情", favoured: "做出防御的动作", "ill-favoured": "似乎不受影响", lose: "被我的挑衅激怒"},
+                33: {win: "被我打动，决定放我一马", favoured: "认真思考我说的话", "ill-favoured": "听不懂我说话", lose: "最讨厌花言巧语的猎物"}
+            },
+            Endtext: [ "下一次，我会是谁呢？", "我度过了精彩的一生。", "我度过了有趣的一生。", 
+            "小鸟的故事永远不会结束。", "下一次，我会经历怎样的故事呢？", "再见啦！", "希望有谁会记得我。", "自然的轮回仍将继续。" ],
+
+            // === 新增的统一趣味文案组 ===
+            FlavorText: {
+                explore: [
+                    "正在探索未知的地区……",
+                    "正在悠闲散步……",
+                    "正在惬意温泉……",
+                    "正在前往熟悉的饮水点……",
+                    "正在跟其他鸟玩耍……",
+                    "正在高楼间欣赏落日……",
+                    "我在观鸟人尝试拍摄我时上蹿下跳……",
+                    "我在枝头唱歌，然后在观鸟人找我的时候闭嘴，等他们走了又继续唱……",
+                    "我从观鸟人面前一闪而过并躲进茂密的树丛……",
+                    "我听见背后渐行渐远的兴奋声音：有一只{me}飞过去了！"
+                ],
+                homeAlone: [
+                    "我在家附近随便逛了逛。",
+                    "正在朝着路过的人类大叫……",
+                    "正在附近收集漂亮的人造小玩意……",
+                    "我报名社区放鸽子大赛，并且没去……"
+                ],
+                friendVisit: [
+                    "我在附近的公园闲逛，发现我的朋友 {friend} 在这里安了家。",
+                    "我约上朋友 {friend} 一起在小水塘喝水和洗澡。",
+                    "我和来拜访的朋友 {friend} 一起在黑色的汽车上拉黑白色的屎……",
+                    "我和来拜访的朋友 {friend} 一起在白色的汽车上拉黑色的屎……",
+                    "我和来拜访的朋友 {friend} 玩了文字冒险游戏《转生为城市人》。"
+                ]
+            }
+        };
+        
+        // 所有成就的图鉴库（仅保留ID和文本，用于成就馆展示）
+        const allAchievements = [
+            { id: 'age7', text: '【寿比南山】——年龄达到7岁！' },
+            { id: 'child7', text: '【子孙满堂】——拥有7个后代！' },
+            { id: 'child0', text: '【自然选择】——没有后代！' },
+            { id: 'friend5', text: '【朋友遍天下】——拥有5个朋友！' },
+            { id: 'friend0', text: '【社恐】——没有朋友！' },
+            { id: 'human5', text: '【人类之友】——遇到人类5次！' },
+            { id: 'gift3', text: '【羽毛收藏者】——在一局中获得3种礼物！' },
+            { id: 'death5', text: '【求生欲】——逃脱死亡5次！' },
+            { id: 'food10', text: '【粮仓】——没来得及吃的食物成为其他鸟的粮仓！' },
+            { id: 'exp10', text: '【教科书】——丰富经验被写成笔记代代相传！' },
+            { id: 'age1', text: '【雏鸟】——没有活过第一年！' },
+            { id: 'eatenByFriend', text: '【最好吃的朋友】——成为朋友的美食！' }
+        ];
+
+        // === 游戏全局变量 ===
+        let Myinfo = {};
+        let Mystat = {};
+        // 【新增】读取本地浏览器缓存中的成就记录，如果没有则初始化为空数组
+        let unlockedAchievements = JSON.parse(localStorage.getItem('bird_achievements')) || [];
+        
+        // === 核心工具库 ===
+        const Sleep = (ms = 600) => new Promise(resolve => setTimeout(resolve, ms));
+        
+        function randChoice(arr) {
+            return arr[Math.floor(Math.random() * arr.length)];
+        }
+        
+        function randInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        async function add_line(text, isSeparator = false) {
+            const logArea = document.getElementById("log_area");
+            const p = document.createElement("div");
+            p.className = "log-line" + (isSeparator ? " separator" : "");
+            
+            // --- 新增：自动识别带有选项的问句并加粗 ---
+            const boldTexts = [
+                "准备好体验鸟类在城市中的生存挑战了吗？",
+                "一觉醒来我转生了！我变成了——",
+                "天气很好，要出门结识新的伙伴吗？",
+                "要前往人类生活的区域觅食吗？",
+                "繁殖季到了，我有足够的能力养育后代吗？我选择——"
+            ];
+            // 匹配固定问句，或者匹配战斗中动态生成的“我选择——”
+            if (boldTexts.includes(text) || text.endsWith("我选择——")) {
+                p.style.fontWeight = "bold";
+                p.style.color = "#000"; // 纯黑字体，使其在视觉上更突出
+            }
+            // ------------------------------------------
+
+            p.innerText = text;
+            logArea.appendChild(p);
+            logArea.scrollTop = logArea.scrollHeight; 
+            await Sleep(100);
+        }
+
+        function update_info_box() {
+            document.getElementById("bird_name").innerText = `【${Myinfo.name || "未知"}】`;
+            document.getElementById("stat_age").innerText = Mystat.AGE || 0;
+            document.getElementById("stat_food").innerText = Mystat.FOOD || 0;
+            document.getElementById("stat_exp").innerText = Mystat.EXP || 0;
+        }
+
+        function actions(buttons) {
+            return new Promise(resolve => {
+                const actionArea = document.getElementById("action_area");
+                actionArea.innerHTML = ""; 
+                buttons.forEach(btn => {
+                    const buttonEl = document.createElement("button");
+                    buttonEl.className = "action-btn";
+                    buttonEl.innerText = btn.label;
+                    buttonEl.onclick = () => {
+                        actionArea.innerHTML = ""; 
+                        resolve(btn.value);
+                    };
+                    actionArea.appendChild(buttonEl);
+                });
+                
+                // 【核心修复】当按钮生成、撑高了底部区域后，强制让上方的文字框再次滚到底部
+                setTimeout(() => {
+                    const logArea = document.getElementById("log_area");
+                    logArea.scrollTop = logArea.scrollHeight;
+                }, 50);
+            });
+        }
+
+        function MakeRoll(value, target) {
+            const result = randInt(1, 4) + value;
+            return result >= target ? 1 : 0;
+        }
+
+        function deepCopy(obj) {
+            return JSON.parse(JSON.stringify(obj));
+        }
+
+        // === 游戏流程模块 ===
+
+        async function ShowWelcome() {
+            document.getElementById("log_area").innerHTML = "";
+            document.getElementById("info_box").style.display = "none";
+            await add_line("/".repeat(20), true);
+            await add_line("【从零开始的城市鸟生活】——线上鸟类Only专属版", true);
+            await add_line("版本：v3.0 (2026.5)\n制作：4097\n文案：Venator Noctis", true);
+            await add_line("/".repeat(20), true);
+            await add_line("\n提示：\n- 本游戏还在开发中，随时可能在本链接更新\n- 欢迎关注鸟类线上Only展（2026.8.8 线上），小红书搜索了解详情\n- 可以把“举报”按钮拖动到不影响游玩的地方");
+            await Sleep();
+            await add_line(" ");
+            await add_line("准备好体验鸟类在城市中的生存挑战了吗？");
+
+            const choice = await actions([
+                {label: "开始游戏", value: 1}, 
+                {label: "查看成就", value: 2},
+                {label: "游戏信息与致谢", value: 3}
+            ]);
+            
+            if (choice === 1) {
+                await main_game();
+            } else if (choice === 2) {
+                await ShowAchievements();
+            } else {
+                await ShowCredits(); // 唤起致谢界面
+            }
+        }
+
+        // === 新增：成就展示界面 ===
+        async function ShowAchievements() {
+            document.getElementById("log_area").innerHTML = "";
+            await add_line("/".repeat(20), true);
+            await add_line("       我的成就", true);
+            await add_line("/".repeat(20), true);
+            await add_line(" ");
+
+            let count = 0;
+            for (let ach of allAchievements) {
+                if (unlockedAchievements.includes(ach.id)) {
+                    await add_line(`⭐ ${ach.text}`);
+                    count++;
+                } else {
+                    await add_line(`🔒 ？？？`);
+                }
+            }
+            
+            await add_line(" ");
+            await add_line(`收集进度：${count} / ${allAchievements.length}`);
+            await add_line(" ");
+            await add_line(`提示：清理浏览器缓存也会清除成就记录`);
+            
+            const choice = await actions([{label: "返回标题", value: 1}, {label: "清除成就记录", value: 2}]);
+            if (choice === 1) {
+                await ShowWelcome();
+            } else {
+                localStorage.removeItem('bird_achievements');
+                unlockedAchievements = [];
+                await add_line("本地成就记录已清除！");
+                await Sleep(800);
+                await ShowWelcome();
+            }
+        }
+
+        // === 新增：致谢展示界面 ===
+        async function ShowCredits() {
+            document.getElementById("log_area").innerHTML = "";
+            await add_line("/".repeat(20), true);
+            await add_line("   游戏信息与致谢", true);
+            await add_line("/".repeat(20), true);
+            await add_line(" ");
+            
+            await add_line("制作：4097\n- 小红书：4097（画画中）\n文案：Venator Noctis\n\n");
+            await add_line("本作品是为线上鸟类Only开发的互动游戏，并永久开放免费游玩。\n请支持2026.8.8在CPP无差别同人站举办的线上鸟类Only展！小红书搜索了解活动详情。\n\n");
+            await add_line("游戏正在开发中，计划增加美术素材和继续完善游戏内容。欢迎稍后再来体验~\n\n");            
+            await add_line("感谢线上鸟类Only主办团队对游戏开发的支持和帮助！\n感谢复旦大学翼缘社、鸟类Only参与者以及所有参与测试并提供反馈的玩家！");
+            
+            // 返回标题的交互
+            const choice = await actions([{label: "返回标题", value: 1}]);
+            if (choice === 1) {
+                await ShowWelcome();
+            }
+        }
+
+        async function BeginGame() {
+            document.getElementById("log_area").innerHTML = "";
+            document.getElementById("info_box").style.display = "flex"; // 恢复显示
+            
+            // 【核心修复】在游戏刚开始、还没选择鸟类之前，强制重置面板并刷新显示
+            Myinfo = {name: "未知"};
+            Mystat = {AGE: 0, EXP: 0, FOOD: 0, LIVE: 1, DANGER: 0, Humanlist: [], Friendlist: [], Giftlist: [], Deathcount: 0, Childcount: 0};
+            update_info_box();
+
+            await add_line("一觉醒来我转生了！我变成了——");
+            await Sleep();
+            const keys = Object.keys(birdinfo);
+            const selected = keys.sort(() => 0.5 - Math.random()).slice(0, 3);
+            
+            let btns = [];
+            for (let i = 0; i < 3; i++) {
+                await add_line(`  <${i+1}> ${birdinfo[selected[i]].name}`);
+                btns.push({label: `<${i+1}>`, value: selected[i]});
+            }
+            
+            const choice = await actions(btns);
+            Myinfo = deepCopy(birdinfo[choice]); 
+            
+            await add_line(" ");
+            await add_line(`...一只刚出生的${Myinfo.name}！`);
+            await add_line(" ");
+            
+            await BeginSpecial();
+            await Sleep();
+            update_info_box();
+        }
+
+        async function BeginSpecial() {
+            // 基础的出生事件池（0-5有特殊效果，6-11为无事发生）
+            let pool = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
+            // === 动态事件池：如果拥有成就，就把隐藏事件加入奖池 ===
+            if (unlockedAchievements.includes('exp10')) {
+                pool.push(100); 
+            }
+            if (unlockedAchievements.includes('food10')) {
+                pool.push(101); 
+            }
+
+            const spec = randChoice(pool);
+            
+            if (spec === 0) {
+                await add_line("我的父母似乎结交了一些危险的朋友……");
+                Mystat.Friendlist.push(randChoice([103, 123, 124]));
+            } else if (spec === 1) {
+                await add_line("我的父母为我积攒了不少食物。（初始食物+3）");
+                Mystat.FOOD += 3;
+            } else if (spec === 2) {
+                await add_line("我的父母为我留下了少量食物。（初始食物+1）");
+                Mystat.FOOD += 1;
+            }else if (spec === 3) {
+                await add_line("我在吃饭时总竞争不过同窝的兄弟姐妹。（初始食物-1）");
+                Mystat.FOOD -= 1;
+            }else if (spec === 4) {
+                await add_line("我的父母从小带我闯荡社会。（初始经验+1）");
+                Mystat.EXP += 1;
+            } else if (spec === 5) {
+                await add_line("我的父母没教我生存技能就匆忙离开了。（初始经验-1）");
+                Mystat.EXP -= 1;
+            }
+            // === 新增的隐藏成就事件 ===
+            else if (spec === 100) {
+                await add_line("我发现了一本记载前辈经验的【教科书】！里面有很多城市生存的技巧！（经验+5）");
+                Mystat.EXP += 5;
+            } else if (spec === 101) {
+                await add_line("我发现了一个前辈留下的【粮仓】！里面有很多保存完好的食物！（食物+5）");
+                Mystat.FOOD += 5;
+            }
+            await add_line(" ");
+        }
+
+        async function NewYear() {
+            await add_line("/".repeat(20), true);
+            await Sleep();
+            Mystat.AGE += 1;
+            await add_line(`这是我出生的第${Mystat.AGE}年。`);
+            await add_line(" ");
+            update_info_box();
+        }
+
+        async function FriendEvent() {
+            await add_line("天气很好，要出门结识新的伙伴吗？");
+            await Sleep();
+            await add_line("  <1> 外出探索");
+            await add_line("  <2> 待在家里");
+            await add_line(" ");
+            const choice = await actions([ {label: "<1>", value: 1}, {label: "<2>", value: 2} ]);
+            
+            if (choice === 1) {
+                let selectedId;
+                const friendKeys = Object.keys(eventData.Friend);
+                while(true) {
+                    selectedId = randChoice(friendKeys);
+                    if (!Mystat.Friendlist.includes(selectedId)) break;
+                }
+                Mystat.Friendlist.push(selectedId);
+                await Sleep();
+                
+                // 从开头的数据字典中抽取文本，并将 {me} 替换为自己的鸟类名字
+                const exploreText = randChoice(eventData.FlavorText.explore).replace("{me}", Myinfo.name);
+                await add_line(exploreText);
+                await add_line(" ");
+                await Sleep();
+                await add_line(`在旅行途中，我认识了一位新朋友——${eventData.Friend[selectedId].name}！`);
+                await Sleep();
+                if (eventData.Friend[selectedId].tasty === 0) {
+                    await add_line("它觉得我很可爱。");
+                    await add_line(" ");
+                } else {
+                    await add_line("它似乎觉得我很好吃？");
+                    await add_line(" ");
+                }
+                await Sleep();
+                await DangerCheck(0.6);
+                
+            } else {
+                // 【核心修改】如果有朋友，并且随机数小于0.7（即70%概率），才触发朋友来访
+                if (Mystat.Friendlist.length > 0 && Math.random() < 0.7) {
+                    const selectedId = randChoice(Mystat.Friendlist);
+                    const friend = eventData.Friend[selectedId];
+                    
+                    if (friend.tasty === 0) {
+                        const giftId = friend.gift;
+                        
+                        const visitText = randChoice(eventData.FlavorText.friendVisit).replace("{friend}", friend.name);
+                        await add_line(visitText);
+                        await Sleep();
+
+                        if (Mystat.Giftlist.includes(giftId)) {
+                            await add_line(" "); // 已有礼物，仅显示一句空白过渡
+                        } else {
+                            await add_line(`分别时，${friend.name} 送给我一份礼物！`);
+                            await add_line(`获得物品：${eventData.Gift[giftId].text}。`);
+                            await Sleep();
+                            await add_line(" ");
+                            Mystat.Giftlist.push(giftId);
+                            Mystat.AGE += eventData.Gift[giftId].effect.age || 0;
+                            Mystat.EXP += eventData.Gift[giftId].effect.exp || 0;
+                            Myinfo.fight[0] += eventData.Gift[giftId].effect.str || 0;
+                            Myinfo.fight[1] += eventData.Gift[giftId].effect.dex || 0;
+                            Myinfo.fight[2] += eventData.Gift[giftId].effect.wis || 0;
+                            update_info_box();
+                        }
+                        await Sleep();
+                    } else {
+                        await add_line(`我的朋友 ${friend.name} 出现在我家门口，看起来很饿……`);
+                        await add_line(" ");
+                        await Sleep();
+                        await FightEvent(friend);
+                        await Sleep();
+                    }
+                } else {
+                    // 【合并逻辑】如果没有朋友，或者在另外30%的概率里，触发独自在家
+                    const homeText = randChoice(eventData.FlavorText.homeAlone);
+                    await add_line(homeText);
+                    await add_line(" ");
+                    await Sleep();
+                }
+                await DangerCheck(0.3);
+            }
+        }
+
+        async function HumanEvent() {
+            await add_line("要前往人类生活的区域觅食吗？");
+            await Sleep();
+            await add_line("  <1> 靠近");
+            await add_line("  <2> 远离");
+            await add_line(" ");
+            const choice = await actions([{label: "<1>", value: 1}, {label: "<2>", value: 2}]);
+            
+            if (choice === 1) {
+                await add_line("在城镇中游荡……");
+                await Sleep();
+                
+                if (randChoice(["meet", "notmeet"]) === "meet") {
+                    let selectedId;
+                    const humanKeys = Object.keys(eventData.Human);
+                    while(true) {
+                        selectedId = randChoice(humanKeys);
+                        if (!Mystat.Humanlist.includes(selectedId)) break;
+                    }
+                    await add_line(`我${eventData.Human[selectedId].text}。`);
+                    await add_line(" ");
+                    await Sleep();
+                    Mystat.Humanlist.push(selectedId);
+                    
+                    if (randChoice([0,1,2,3,4,5]) === 0) {
+                        await add_line("我发现了一处人类的投喂点，未来的日子吃喝不愁了！！（食物+10）");
+                        await add_line(" ");
+                        Mystat.FOOD += 10;
+                        update_info_box();
+                        await Sleep();
+                    }
+                } else {
+                    // 完美还原 Python 逻辑：仅当 (notmeet) 时，才触发“自由穿梭”和“觅食事件”
+                    await add_line("我在高楼间自由穿梭，仿佛生来就属于这里。");
+                    await add_line(" ");
+                    await Sleep();
+                    await FoodEvent();
+                }
+                
+                await add_line("在人类居住区的经历让我增长了见识。（经验+1）");
+                await add_line(" ");
+                Mystat.EXP += 1;
+                update_info_box();
+                await Sleep();
+                await DangerCheck(0.6);
+                
+            } else {
+                await add_line("我没有冒险接近人类的生活区。");
+                await add_line(" ");
+                await Sleep();
+                await FoodEvent();
+            }
+        }
+
+        async function BreedEvent() {
+            await add_line("繁殖季到了，我有足够的能力养育后代吗？我选择——");
+            await Sleep();
+            await add_line("  <1> 谈恋爱");
+            await add_line("  <2> 单身");
+            await add_line(" ");
+            const choice = await actions([{label: "<1>", value: 1}, {label: "<2>", value: 2}]);
+            
+            if (choice === 1) {
+                await add_line("寻找伴侣中...");
+                await Sleep();
+                if (Mystat.EXP === 0) {
+                    const failId = randChoice([101, 102]);
+                    await add_line(`由于${eventData.Breed[failId].text}，寻找伴侣失败。`);
+                    await add_line(" ");
+                    await Sleep();
+                } else {
+                    await add_line("筑巢中...孵化中...");
+                    await Sleep();
+                    if (MakeRoll(Mystat.EXP, 5) === 0) {
+                        const failId = randChoice([201, 202, 203, 204]);
+                        await add_line(`由于${eventData.Breed[failId].text}，孵化失败。（食物-1）`);
+                        await add_line(" ");
+                        Mystat.FOOD -= 1;
+                        update_info_box();
+                        await Sleep();
+                    } else {
+                        const child = randChoice([0, -1]) + Myinfo.childlim;
+                        await add_line(`有${child}个蛋成功孵化！`);
+                        await add_line(" ");
+                        await Sleep();
+                        await add_line("养育雏鸟中……");
+                        if (MakeRoll(Mystat.EXP, 5) === 0) {
+                            const failId = randChoice([301, 302, 303, 304]);
+                            await add_line(`由于${eventData.Breed[failId].text}，我没能养大它们。（食物-1）`);
+                            await add_line(" ");
+                            Mystat.FOOD -= 1;
+                            update_info_box();
+                            await Sleep();
+                        } else {
+                            if (Mystat.FOOD <= 0) {
+                                await add_line(`由于${eventData.Breed[401].text}。（食物-1）`);
+                                await add_line(" ");
+                                Mystat.FOOD -= 1;
+                                update_info_box();
+                                await Sleep();
+                            } else {
+                                const child_max = Math.min(Mystat.FOOD, child);
+                                const child_min = Math.max(1, child_max - 2);
+                                const child_live = randInt(child_min, child_max);
+                                await add_line(`经过一番努力，我养大了${child_live}只健康活泼的雏鸟！（食物-${child_live}）`);
+                                await add_line(" ");
+                                Mystat.Childcount += child_live;
+                                Mystat.FOOD -= child_live;
+                                update_info_box();
+                                await Sleep();
+                            }
+                        }
+                    }
+                }
+                await add_line("繁殖经历让我积累了经验。（经验+1）");
+                await add_line(" ");
+                Mystat.EXP += 1;
+                update_info_box();
+                await Sleep();
+                await DangerCheck(0.6);
+            } else {
+                await add_line("我决定吃吃喝喝养精蓄锐。（食物+2）");
+                await add_line(" ");
+                Mystat.FOOD += 2;
+                update_info_box();
+                await Sleep();
+                await DangerCheck(0.3);
+            }
+        }
+
+        async function FoodEvent() {
+            await add_line("觅食中……");
+            await Sleep();
+            const selectedId = randChoice(Object.keys(eventData.Food));
+            const foodtoday = randChoice(Myinfo.food);
+            const resText = eventData.Food[selectedId].text.replace("{food}", foodtoday);
+            await add_line(`今天我${resText}`);
+            await add_line(" ");
+            Mystat.FOOD += eventData.Food[selectedId].effect.food;
+            await Sleep();
+            Mystat.DANGER += Math.random() * 0.3;
+            update_info_box();
+        }
+
+        async function DangerCheck(value) {
+            Mystat.DANGER += Math.random() * value;
+            if (Mystat.DANGER > 1) {
+                await DeathEvent();
+                if (Mystat.LIVE === 1) {
+                    Mystat.Deathcount += 1;
+                    Mystat.DANGER = 0;
+                }
+            }
+        }
+
+        async function DeathEvent() {
+            if (Mystat.FOOD <= 0) {
+                await add_line("由于天气恶劣，我好几天没找到食物，我感到饥饿...");
+                await Sleep();
+                if (Mystat.AGE <= Myinfo.agelim) {
+                    await add_line("幸好我体质不错，撑了几天并找到了食物。（食物+2）");
+                    await add_line(" ");
+                    Mystat.FOOD += 2;
+                    update_info_box();
+                } else {
+                    await add_line("饥饿使我精疲力尽，我倒下了。");
+                    await add_line(" ");
+                    Mystat.LIVE = 0;
+                }
+            } else {
+                const deathType = randInt(1, 3);
+                if (deathType === 1) {
+                    const sel = randChoice([101, 102, 103]);
+                    await add_line(`糟糕，一只${eventData.Death[sel].name}对我虎视眈眈！`);
+                    await add_line(" ");
+                    await Sleep();
+                    await FightEvent(eventData.Death[sel]);
+                } else if (deathType === 2) {
+                    const sel = randChoice([201, 202, 203, 204]);
+                    await add_line(`我忙于觅食或飞行，没注意到附近危险的${eventData.Death[sel].name}。`);
+                    await Sleep();
+                    if (MakeRoll(Myinfo.agelim - Mystat.AGE, 5) === 0) {
+                        await add_line(`增长的年岁减缓了我的反应速度，我没能逃脱，成为了${eventData.Death[sel].name}的牺牲品。`);
+                        await add_line(" ");
+                        Mystat.LIVE = 0;
+                    } else if (MakeRoll(Mystat.EXP, 4) === 0) {
+                        await add_line(`缺乏经验让我措手不及，我没能逃脱，成为了${eventData.Death[sel].name}的牺牲品。`);
+                        await add_line(" ");
+                        Mystat.LIVE = 0;
+                    } else {
+                        await add_line(`由于经验充足而反应迅速，我幸运地逃离了${eventData.Death[sel].name}。`);
+                        await add_line(" ");
+                    }
+                } else {
+                    const sel = randChoice([301, 302]);
+                    if (Mystat.AGE <= Myinfo.agelim) {
+                        await add_line(`${eventData.Death[sel].success}`);
+                        await add_line(" ");
+                    } else {
+                        await add_line(`${eventData.Death[sel].fail}`);
+                        await add_line(" ");
+                        Mystat.LIVE = 0;
+                    }
+                }
+            }
+            await Sleep();
+        }
+
+        // 完全还原原版逻辑的三回合战斗系统
+        async function FightEvent(enemy) {
+            await add_line("----------战斗开始----------");
+            await Sleep();
+            await add_line(`【${enemy.name} vs. ${Myinfo.name}】`);
+            await Sleep();
+            
+            let tmp = [0, 0, 0];
+            if (Mystat.AGE >= Myinfo.agelim) {
+                await add_line("经年累月的生存使我的智慧增加，但行动能力变弱。（目标值修正）");
+                tmp = [2, 2, -2];
+            }
+            
+            let result = "";
+            const skill = ["力量", "敏捷", "智慧"];
+            
+            for (let i = 1; i <= 3; i++) {
+                await add_line(`---第${i}/3轮---`);
+                await Sleep();
+                let sceneText = eventData.Fight[i].text.replace("{enemy}", enemy.name);
+                await add_line(sceneText + "我选择——");
+                await add_line(" ");
+                await Sleep();
+                
+                let btns = [];
+                for (let j = 1; j <= 3; j++) {
+                    let curTarget = enemy.fight[j-1] + tmp[j-1];
+                    await add_line(`  <${j}> ${eventData.Fight[i][skill[j-1]]}（${skill[j-1]}${Myinfo.fight[j-1]} 目标${curTarget}）`);
+                    btns.push({label: `<${j}>`, value: j});
+                }
+                
+                let Mychoice = await actions(btns);
+                await Sleep();
+                
+                let roll_random = randInt(1, 12);
+                let roll_value = Myinfo.fight[Mychoice - 1];
+                let roll = roll_random + roll_value;
+                let target = enemy.fight[Mychoice - 1] + tmp[Mychoice - 1];
+                
+                await add_line(" ");
+                await add_line(`掷骰<1d12=${roll_random}> + 属性<${roll_value}> = 最终结果<${roll}>`);
+                await Sleep();
+                
+                let actionKey = (i * 10) + Mychoice;
+                if (roll >= 2 * target) {
+                    result = "win";
+                    await add_line("最终结果大于目标值两倍——");
+                    await Sleep();
+                    await add_line(`对手${eventData.Fight[actionKey].win}，放弃了捕食。`);
+                    await add_line(" ");
+                    break;
+                } else if (roll < target / 2) {
+                    result = "lose";
+                    await add_line("最终结果小于目标值一半——");
+                    await Sleep();
+                    await add_line(`对手${eventData.Fight[actionKey].lose}，然后致命一击。`);
+                    await add_line(" ");
+                    break;
+                } else if (roll >= target) {
+                    result = "favoured";
+                    await add_line("最终结果大于目标值——");
+                    await Sleep();
+                    await add_line(`对手${eventData.Fight[actionKey].favoured}，让我在下一轮中占有优势。`);
+                    await add_line(" ");
+                    tmp[Mychoice - 1] -= 3;
+                } else {
+                    result = "ill-favoured";
+                    await add_line("最终结果小于目标值——");
+                    await Sleep();
+                    await add_line(`对手${eventData.Fight[actionKey]["ill-favoured"]}，让我在下一轮中处于劣势。`);
+                    await add_line(" ");
+                    tmp[Mychoice - 1] += 3;
+                }
+                await Sleep();
+            }
+            
+            await add_line("----------战斗结束----------");
+            await add_line(" ");
+            if (result === "win") {
+                await add_line(`我幸运地逃脱了${enemy.name}的追捕。`);
+                await add_line(" ");
+            } else {
+                await add_line(`我没能逃脱，成为了${enemy.name}的美餐。`);
+                await add_line(" ");
+                Mystat.LIVE = 0;
+
+                // === 新增：判定吃掉我的敌人，是不是在我的好友列表里 ===
+                // 遍历好友列表的ID，核对它们的名字是否等于凶手的名字
+                const isFriend = Mystat.Friendlist.some(id => eventData.Friend[id] && eventData.Friend[id].name === enemy.name);
+                if (isFriend) {
+                    Mystat.KilledByFriend = true; // 做一个死亡标记
+                }
+            }
+            await Sleep();
+        }
+
+        async function EndGame() {
+            await add_line("/".repeat(20), true);
+            await add_line(`作为一只${Myinfo.name}，\n在我长达${Mystat.AGE}年的一生中，养育了${Mystat.Childcount}个后代，\n与人类近距离接触${Mystat.Humanlist.length}次，死里逃生${Mystat.Deathcount}次，`);
+            await Sleep();
+            
+            let friendStr = Mystat.Friendlist.map(id => eventData.Friend[id].name).join(" ");
+            await add_line(`结交了鸟类朋友：${friendStr}，\n收到${Mystat.Giftlist.length}份特别的礼物。\n`);
+            await Sleep();
+            
+            await add_line(randChoice(eventData.Endtext));
+            await add_line("/".repeat(20), true);
+            await Sleep();
+            
+            // 【新增】每次游戏结束时，动态获取当前局的属性进行判定
+            const currentAchievements = [
+                { id: 'age7', condition: Mystat.AGE >= 7, text: '【寿比南山】——年龄达到7岁！' },
+                { id: 'child7', condition: Mystat.Childcount >= 7, text: '【子孙满堂】——拥有7个后代！' },
+                { id: 'child0', condition: Mystat.Childcount === 0, text: '【自然选择】——没有后代！' },
+                { id: 'friend5', condition: Mystat.Friendlist.length >= 5, text: '【朋友遍天下】——拥有5个朋友！' },
+                { id: 'friend0', condition: Mystat.Friendlist.length === 0, text: '【社恐】——没有朋友！' },
+                { id: 'human5', condition: Mystat.Humanlist.length >= 5, text: '【人类之友】——遇到人类5次！' },
+                { id: 'gift3', condition: Mystat.Giftlist.length >= 3, text: '【羽毛收藏者】——在一局中获得3种礼物！' },
+                { id: 'death5', condition: Mystat.Deathcount >= 5, text: '【求生欲】——逃脱死亡5次！' },
+                { id: 'food10', condition: Mystat.FOOD >= 10, text: '【粮仓】——没来得及吃的食物成为其他鸟的粮仓！' },
+                { id: 'exp10', condition: Mystat.EXP >= 10, text: '【教科书】——丰富经验被写成笔记代代相传！' },
+                { id: 'age1', condition: Mystat.AGE <= 1, text: '【雏鸟】——没有活过第一年！' },
+                { id: 'eatenByFriend', condition: Mystat.KilledByFriend, text: '【最好吃的朋友】——成为朋友的美食！' }
+            ];
+
+            let newlyUnlocked = false;
+
+            // 注意这里的循环变量改成了 currentAchievements
+            for (let ach of currentAchievements) {
+                if (ach.condition) {
+                    if (!unlockedAchievements.includes(ach.id)) {
+                        // 如果是新成就，存入列表并特殊高亮显示
+                        unlockedAchievements.push(ach.id);
+                        newlyUnlocked = true;
+                        await add_line(`🌟 【新成就解锁】恭喜达成${ach.text}`);
+                    } else {
+                        // 以前拿过的成就普通显示
+                        await add_line(`⭐ 成就：${ach.text}`);
+                    }
+                }
+            }
+
+            // 如果本局有新成就，统一保存到浏览器的 localStorage 中
+            if (newlyUnlocked) {
+                localStorage.setItem('bird_achievements', JSON.stringify(unlockedAchievements));
+            }
+                        
+            await Sleep();
+            await add_line(" ");
+            await add_line("提示：本作品以游戏性为主，参考但可能不完全符合真实鸟类知识。");
+            await add_line(" ");
+            await add_line("要再来一局吗？");
+            await add_line("  <1> 重新开始\n  <2> 返回标题\n");
+            
+            const choice = await actions([{label: "<1>", value: 1}, {label: "<2>", value: 2}]);
+            
+            if (choice === 1) {
+                await add_line(" ");
+                await add_line("转生中……");
+                await Sleep(1000);
+                await main_game();
+            } else {
+                await ShowWelcome(); // 点击选项2时，直接重新调用标题界面函数
+            }
+        }
+
+        // 核心循环
+        async function main_game() {
+            await BeginGame();
+            while (Mystat.LIVE === 1) {
+                await NewYear();
+                let funlist = [];
+                if (Mystat.AGE === 1) {
+                    funlist = [FriendEvent, HumanEvent];
+                } else {
+                    funlist = [FriendEvent, HumanEvent, BreedEvent];
+                }
+                funlist = funlist.sort(() => 0.5 - Math.random());
+                
+                for (let f of funlist) {
+                    await f();
+                    await Sleep();
+                    if (Mystat.LIVE === 0) break; 
+                }
+            }
+            await EndGame();
+        }
+
+        window.onload = ShowWelcome;
+    </script>
+</body>
+</html>
